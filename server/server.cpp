@@ -7,7 +7,7 @@
 Server::Server(QObject *parent) : QObject(parent) {}
 
 bool Server::start(quint16 port) {
-    if (!udpSocket.bind(QHostAddress::Any, port)) {
+    if (!udpSocket.bind(QHostAddress::LocalHost, port)) {
         Logger::write(LogLevel::ERROR, QString("Server failed to bind port %1").arg(port));
         return false;
     }
@@ -18,6 +18,7 @@ bool Server::start(quint16 port) {
 
 void Server::handleReadyRead() {
     Logger::write(LogLevel::DEBUG, "handleReadyRead() triggered");
+
     while (udpSocket.hasPendingDatagrams()) {
         QByteArray datagram;
         datagram.resize(udpSocket.pendingDatagramSize());

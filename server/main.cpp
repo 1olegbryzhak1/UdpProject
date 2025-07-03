@@ -10,8 +10,9 @@ int main(int argc, char *argv[]) {
     Logger::write(LogLevel::INFO, "Server starting...");
 
     quint16 port = config.value("server/port", 45454).toUInt();
-    if (Server server; !server.start(port))
-    {
+
+    static Server server;
+    if (!server.start(port)) {
         return -1;
     }
 

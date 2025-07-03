@@ -33,7 +33,12 @@ void Client::loadConfig() {
 
 void Client::sendRequest() {
     const QByteArray packet = createRequestPacket(requestValue);
-    qint64 sent = udpSocket.writeDatagram(packet, serverAddress, serverPort);
+
+    Logger::write(LogLevel::INFO, QString("Sending request (%1 bytes) to %2:%3")
+              .arg(packet.size()).arg(serverAddress.toString()).arg(serverPort));
+
+    const qint64 sent = udpSocket.writeDatagram(packet, serverAddress, serverPort);
+
     Logger::write(LogLevel::INFO, QString("Sent request (%1 bytes) to %2:%3")
                   .arg(sent).arg(serverAddress.toString()).arg(serverPort));
 }
@@ -52,7 +57,7 @@ void Client::handleResponse() {
             return;
         }
 
-        const ProtocolHeader *header = reinterpret_cast<const ProtocolHeader *>(datagram.constData());
+        auto header = reinterpret_cast<const ProtocolHeader *>(datagram.constData());
 
         if (header->messageType == static_cast<quint8>(MessageType::ERROR_UNSUPPORTED_VERSION)) {
             logError("Unsupported protocol version from server");
