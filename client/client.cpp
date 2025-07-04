@@ -30,7 +30,7 @@ void Client::start() {
 
     connect(&receiveTimeout, &QTimer::timeout, this, &Client::onReceiveTimeout);
     receiveTimeout.setSingleShot(true);
-    receiveTimeout.start(10000);
+    receiveTimeout.start(30000);
 }
 
 bool Client::loadConfig() {

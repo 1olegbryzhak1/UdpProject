@@ -19,4 +19,7 @@ Client:
 - Generates a random `clientId` automatically
 - Logs activity to `logs/client_<id>.log`
 
+Build instructions:
+- You must specify the path to Qt using CMAKE_PREFIX_PATH (-DCMAKE_PREFIX_PATH="/path/Qt/6.8.0/gcc_64/lib/cmake")
+
 Use `run_clients.sh` file to test current project

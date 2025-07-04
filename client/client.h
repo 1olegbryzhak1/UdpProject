@@ -5,6 +5,7 @@
 #include <QUdpSocket>
 #include <QTimer>
 #include <QHostAddress>
+#include <QSet>
 
 class Client : public QObject {
     Q_OBJECT
