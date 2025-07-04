@@ -17,6 +17,9 @@ void Client::start() {
         Logger::write(LogLevel::ERROR, "Client failed to bind socket");
         return;
     }
+
+    udpSocket.setSocketOption(QAbstractSocket::ReceiveBufferSizeSocketOption, 1024 * 1024); // 1MB
+
     Logger::write(LogLevel::INFO, "Client socket bound");
     timer.setSingleShot(true);
     timer.start(3000);
@@ -45,39 +48,76 @@ void Client::sendRequest() {
 
 void Client::handleResponse() {
     Logger::write(LogLevel::DEBUG, "handleResponse() triggered");
-    while (udpSocket.hasPendingDatagrams()) {
+
+    while (udpSocket.hasPendingDatagrams())
+    {
+        Logger::write(LogLevel::DEBUG, "Reading datagram ...");
+
         QByteArray datagram;
         datagram.resize(udpSocket.pendingDatagramSize());
         udpSocket.readDatagram(datagram.data(), datagram.size());
 
-        Logger::write(LogLevel::DEBUG, QString("Received datagram size: %1").arg(datagram.size()));
-
         if (datagram.size() < sizeof(ProtocolHeader)) {
-            logError("Datagram too small");
-            return;
+            Logger::write(LogLevel::ERROR, "Datagram too small");
+            continue;
         }
 
         auto header = reinterpret_cast<const ProtocolHeader *>(datagram.constData());
-
-        if (header->messageType == static_cast<quint8>(MessageType::ERROR_UNSUPPORTED_VERSION)) {
-            logError("Unsupported protocol version from server");
-            return;
+        if (header->messageType != static_cast<quint8>(MessageType::RESPONSE_DATA)) {
+            Logger::write(LogLevel::WARNING, "Unexpected message type received");
+            continue;
         }
 
-        if (header->messageType == static_cast<quint8>(MessageType::RESPONSE_DATA)) {
-            QByteArray payload = datagram.mid(sizeof(ProtocolHeader));
-            QVector<double> values(payload.size() / sizeof(double));
-            memcpy(values.data(), payload.constData(), payload.size());
-            std::sort(values.begin(), values.end(), std::greater<>());
+        if (totalChunks == -1)
+        {
+            totalChunks = header->totalChunks;
+            Logger::write(LogLevel::DEBUG, "Total chunks - " + QString::number(totalChunks));
+        }
 
-            QByteArray sorted(reinterpret_cast<const char*>(values.data()), values.size() * sizeof(double));
-            writeToFile(sorted);
-            Logger::write(LogLevel::INFO, QString("Saved %1 sorted doubles to output.bin").arg(values.size()));
+        if (receivedChunks.contains(header->chunkId)) {
+            Logger::write(LogLevel::DEBUG, QString("Chunk %1 already received").arg(header->chunkId));
+            continue;
+        }
+
+        QByteArray payload = datagram.mid(sizeof(ProtocolHeader));
+        int count = payload.size() / sizeof(double);
+        QVector<double> chunk(count);
+        memcpy(chunk.data(), payload.constData(), payload.size());
+
+        receivedData += chunk;
+        receivedChunks.insert(header->chunkId);
+
+        Logger::write(LogLevel::DEBUG, QString("Received chunk %1 (%2 bytes, %3 doubles)")
+                      .arg(header->chunkId + 1).arg(payload.size()).arg(count));
+
+        if (receivedChunks.size() == totalChunks) {
+            Logger::write(LogLevel::INFO, "All chunks received. Sorting...");
+            std::sort(receivedData.begin(), receivedData.end(), std::greater<>());
+            Logger::write(LogLevel::INFO, "Sorting finished");
+            writeToTextFile(receivedData);
+            Logger::write(LogLevel::INFO, QString("Saved %1 sorted doubles to output.txt").arg(receivedData.size()));
         }
     }
 }
 
+void Client::writeToTextFile(const QVector<double> &data) {
+    Logger::write(LogLevel::INFO, "Saving data to textfile...");
+
+    QFile file("output.txt");
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        Logger::write(LogLevel::ERROR, "Cannot open output.txt");
+        return;
+    }
+    QTextStream out(&file);
+    for (double val : data) {
+        out << val << "\n";
+    }
+    file.close();
+}
+
 void Client::writeToFile(const QByteArray &data) {
+    Logger::write(LogLevel::INFO, "Saving data to binary file...");
+
     QFile file("output.bin");
     if (!file.open(QIODevice::WriteOnly)) {
         Logger::write(LogLevel::ERROR, "Cannot open output.bin");

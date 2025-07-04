@@ -4,7 +4,7 @@
 #include <QtGlobal>
 
 constexpr quint8 PROTOCOL_VERSION = 1;
-constexpr int DOUBLE_COUNT = 100;
+constexpr int DOUBLE_COUNT = 1000000;
 
 enum class MessageType : quint8 {
     REQUEST_RANDOM_ARRAY = 1,
@@ -15,8 +15,10 @@ enum class MessageType : quint8 {
 struct ProtocolHeader {
     quint8 version;
     quint8 messageType;
-    quint16 reserved;
+    quint16 chunkId;
     quint32 payloadSize;
+    quint16 totalChunks;
+    quint16 reserved;
 };
 
 inline QByteArray createRequestPacket(double value) {
