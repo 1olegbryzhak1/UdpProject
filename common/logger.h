@@ -17,8 +17,13 @@ enum class LogLevel {
 class Logger {
 public:
     static inline auto minLogLevel = LogLevel::DEBUG;
+    static inline QString logFileName = "app.log";
 
-    static void write(LogLevel level, const QString &msg, const QString &fileName = "app.log") {
+    static void setLogFileName(const QString& name) {
+        logFileName = name;
+    }
+
+    static void write(LogLevel level, const QString &msg) {
         if (level < minLogLevel)
             return;
 
@@ -26,18 +31,19 @@ public:
         QString prefix;
 
         switch (level) {
-            case LogLevel::DEBUG:   prefix = "[DEBUG] "; break;
-            case LogLevel::INFO:    prefix = "[INFO] "; break;
-            case LogLevel::WARNING: prefix = "[WARN] "; break;
-            case LogLevel::ERROR:   prefix = "[ERROR] "; break;
+        case LogLevel::DEBUG:   prefix = "[DEBUG] "; break;
+        case LogLevel::INFO:    prefix = "[INFO] "; break;
+        case LogLevel::WARNING: prefix = "[WARN] "; break;
+        case LogLevel::ERROR:   prefix = "[ERROR] "; break;
         }
 
-        const QString fullMessage = QString("%1 %2%3").arg(timeStamp, prefix, msg);
+        const QString fullMessage = QString("%1%2%3").arg(timeStamp, prefix, msg);
 
-        QFile file(fileName);
+        QFile file(logFileName);
         if (file.open(QIODevice::Append | QIODevice::Text)) {
             QTextStream out(&file);
             out << fullMessage << "\n";
+            out.flush();
             file.close();
         }
 

@@ -6,13 +6,17 @@
 #include <QDataStream>
 #include <algorithm>
 
-Client::Client(QObject *parent) : QObject(parent) {
+Client::Client(int id, QObject *parent) : QObject(parent), clientId(id) {
     connect(&udpSocket, &QUdpSocket::readyRead, this, &Client::handleResponse);
     connect(&timer, &QTimer::timeout, this, &Client::sendRequest);
 }
 
 void Client::start() {
-    loadConfig();
+    if (!loadConfig())
+    {
+        Logger::write(LogLevel::ERROR, "Failed to load config");
+        return;
+    }
     if (!udpSocket.bind()) {
         Logger::write(LogLevel::ERROR, "Client failed to bind socket");
         return;
@@ -26,16 +30,25 @@ void Client::start() {
 
     connect(&receiveTimeout, &QTimer::timeout, this, &Client::onReceiveTimeout);
     receiveTimeout.setSingleShot(true);
-    receiveTimeout.start(5000);
+    receiveTimeout.start(10000);
 }
 
-void Client::loadConfig() {
-    QSettings config("config.ini", QSettings::IniFormat);
-    serverAddress = QHostAddress(config.value("client/host", "127.0.0.1").toString());
-    serverPort = config.value("client/port", 45454).toUInt();
-    requestValue = config.value("client/value", 100.0).toDouble();
+bool Client::loadConfig() {
+    const QString configPath = "config.ini";
+
+    if (!QFile::exists(configPath)) {
+        Logger::write(LogLevel::ERROR, "Config file '" + configPath + "' not found in current client directory");
+        return false;
+    }
+
+    QSettings config(configPath, QSettings::IniFormat);
+    serverAddress = QHostAddress(config.value("client/host").toString());
+    serverPort = config.value("client/port").toUInt();
+    requestValue = config.value("client/value").toDouble();
     Logger::write(LogLevel::DEBUG, QString("Loaded config: host=%1, port=%2, value=%3")
                   .arg(serverAddress.toString()).arg(serverPort).arg(requestValue));
+
+    return true;
 }
 
 void Client::sendRequest() {
@@ -66,14 +79,19 @@ void Client::handleResponse() {
             continue;
         }
 
-        auto header = reinterpret_cast<const ProtocolHeader *>(datagram.constData());
-        if (header->messageType != static_cast<quint8>(MessageType::RESPONSE_DATA)) {
-            Logger::write(LogLevel::WARNING, "Unexpected message type received");
-            continue;
+        const ProtocolHeader* header = reinterpret_cast<const ProtocolHeader*>(datagram.constData());
+
+        if (header->messageType == static_cast<quint8>(MessageType::ERROR_UNSUPPORTED_VERSION)) {
+            Logger::write(LogLevel::ERROR, QString("Unsupported protocol version received from server (client: %1)").arg(PROTOCOL_VERSION));
+            return;
         }
 
-        if (totalChunks == -1)
-        {
+        if (header->messageType != static_cast<quint8>(MessageType::RESPONSE_DATA)) {
+            Logger::write(LogLevel::WARNING, QString("Unexpected message type: %1").arg(header->messageType));
+            return;
+        }
+
+        if (totalChunks == -1) {
             totalChunks = header->totalChunks;
             Logger::write(LogLevel::DEBUG, "Total chunks - " + QString::number(totalChunks));
         }
@@ -84,6 +102,16 @@ void Client::handleResponse() {
         }
 
         QByteArray payload = datagram.mid(sizeof(ProtocolHeader));
+
+        quint32 actualCrc = qChecksum(payload.constData());
+        if (actualCrc != header->crc32) {
+            Logger::write(LogLevel::ERROR, QString("CRC mismatch on chunk %1 (expected %2, got %3)")
+                          .arg(header->chunkId)
+                          .arg(header->crc32)
+                          .arg(actualCrc));
+            continue;
+        }
+
         int count = payload.size() / sizeof(double);
         QVector<double> chunk(count);
         memcpy(chunk.data(), payload.constData(), payload.size());
@@ -92,22 +120,33 @@ void Client::handleResponse() {
         receivedChunks.insert(header->chunkId);
 
         Logger::write(LogLevel::DEBUG, QString("Received chunk %1 (%2 bytes, %3 doubles)")
-                      .arg(header->chunkId + 1).arg(payload.size()).arg(count));
+                      .arg(header->chunkId + 1)
+                      .arg(payload.size())
+                      .arg(count));
 
         if (receivedChunks.size() == totalChunks) {
             Logger::write(LogLevel::INFO, "All chunks received. Sorting...");
             std::sort(receivedData.begin(), receivedData.end(), std::greater<>());
             Logger::write(LogLevel::INFO, "Sorting finished");
-            writeToTextFile(receivedData);
-            Logger::write(LogLevel::INFO, QString("Saved %1 sorted doubles to output.txt").arg(receivedData.size()));
+
+            QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss_zzz");
+            QString txtFilename = QString("output/client_%1_output_%2.txt").arg(clientId).arg(timestamp);
+            QString binFilename = QString("output/client_%1_output_%2.bin").arg(clientId).arg(timestamp);
+
+            writeToTextFile(receivedData, txtFilename);
+            Logger::write(LogLevel::INFO, QString("Saved %1 sorted doubles to text file").arg(receivedData.size()));
+
+            writeToFile(receivedData, binFilename);
+            Logger::write(LogLevel::INFO, QString("Saved %1 sorted doubles to binary file").arg(receivedData.size()));
         }
     }
 }
 
-void Client::writeToTextFile(const QVector<double> &data) {
+
+void Client::writeToTextFile(const QVector<double> &data, const QString& filename) {
     Logger::write(LogLevel::INFO, "Saving data to textfile...");
 
-    QFile file("output.txt");
+    QFile file(filename);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         Logger::write(LogLevel::ERROR, "Cannot open output.txt");
         return;
@@ -119,26 +158,17 @@ void Client::writeToTextFile(const QVector<double> &data) {
     file.close();
 }
 
-void Client::writeToFile(const QByteArray &data) {
+void Client::writeToFile(const QVector<double> &data, const QString& filename) {
     Logger::write(LogLevel::INFO, "Saving data to binary file...");
 
-    QFile file("output.bin");
+    QFile file(filename);
     if (!file.open(QIODevice::WriteOnly)) {
         Logger::write(LogLevel::ERROR, "Cannot open output.bin");
         return;
     }
-    file.write(data);
-    file.close();
-}
 
-void Client::logError(const QString &msg) {
-    Logger::write(LogLevel::ERROR, msg);
-    QFile file("client_error.log");
-    if (file.open(QIODevice::Append | QIODevice::Text)) {
-        QTextStream out(&file);
-        out << msg << "\n";
-        file.close();
-    }
+    file.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(double));
+    file.close();
 }
 
 void Client::onReceiveTimeout() {
@@ -159,7 +189,5 @@ void Client::onReceiveTimeout() {
                       .arg(totalChunks - receivedChunks.size())
                       .arg(totalChunks)
                       .arg(missing.join(", ")));
-    } else {
-        Logger::write(LogLevel::INFO, "All chunks received before timeout");
     }
 }

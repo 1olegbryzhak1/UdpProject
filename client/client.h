@@ -10,7 +10,7 @@ class Client : public QObject {
     Q_OBJECT
 
 public:
-    explicit Client(QObject *parent = nullptr);
+    explicit Client(int id, QObject *parent = nullptr);
     void start();
 
 private slots:
@@ -29,11 +29,11 @@ private:
     QSet<int> receivedChunks;
     QTimer receiveTimeout;
     int totalChunks = -1;
+    int clientId = -1;
 
-    void loadConfig();
-    void writeToFile(const QByteArray &data);
-    void writeToTextFile(const QVector<double> &data);
-    void logError(const QString &msg);
+    bool loadConfig();
+    void writeToFile(const QVector<double> &data, const QString& filename);
+    void writeToTextFile(const QVector<double> &data, const QString& filename);
 };
 
 #endif // CLIENT_H

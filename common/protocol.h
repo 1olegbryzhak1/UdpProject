@@ -3,7 +3,7 @@
 
 #include <QtGlobal>
 
-constexpr quint8 PROTOCOL_VERSION = 1;
+constexpr quint8 PROTOCOL_VERSION = 2;
 constexpr int DOUBLE_COUNT = 1000000;
 
 enum class MessageType : quint8 {
@@ -18,6 +18,7 @@ struct ProtocolHeader {
     quint16 chunkId;
     quint32 payloadSize;
     quint16 totalChunks;
+    quint32 crc32;
     quint16 reserved;
 };
 

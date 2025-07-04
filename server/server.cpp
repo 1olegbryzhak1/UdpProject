@@ -54,7 +54,7 @@ void Server::handleReadyRead() {
                 }
             }
 
-            int chunkSize = 5000; // 40KB
+            int chunkSize = 5000; // about 40KB
             int totalChunks = (data.size() + chunkSize - 1) / chunkSize;
 
             for (int i = 0; i < totalChunks; ++i) {
@@ -69,6 +69,7 @@ void Server::handleReadyRead() {
                 chunkHeader.chunkId = i;
                 chunkHeader.totalChunks = totalChunks;
                 chunkHeader.payloadSize = payload.size();
+                chunkHeader.crc32 = qChecksum(payload.constData());
                 chunkHeader.reserved = 0;
 
                 QByteArray packet;
