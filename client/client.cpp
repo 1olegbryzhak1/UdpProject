@@ -23,6 +23,10 @@ void Client::start() {
     Logger::write(LogLevel::INFO, "Client socket bound");
     timer.setSingleShot(true);
     timer.start(3000);
+
+    connect(&receiveTimeout, &QTimer::timeout, this, &Client::onReceiveTimeout);
+    receiveTimeout.setSingleShot(true);
+    receiveTimeout.start(5000);
 }
 
 void Client::loadConfig() {
@@ -134,5 +138,28 @@ void Client::logError(const QString &msg) {
         QTextStream out(&file);
         out << msg << "\n";
         file.close();
+    }
+}
+
+void Client::onReceiveTimeout() {
+    if (totalChunks == -1) {
+        Logger::write(LogLevel::ERROR, "Timeout: did not receive any chunks");
+        return;
+    }
+
+    if (receivedChunks.size() < totalChunks) {
+        QStringList missing;
+        for (int i = 0; i < totalChunks; ++i) {
+            if (!receivedChunks.contains(i)) {
+                missing << QString::number(i);
+            }
+        }
+
+        Logger::write(LogLevel::ERROR, QString("Missing %1/%2 chunks. IDs: [%3]")
+                      .arg(totalChunks - receivedChunks.size())
+                      .arg(totalChunks)
+                      .arg(missing.join(", ")));
+    } else {
+        Logger::write(LogLevel::INFO, "All chunks received before timeout");
     }
 }

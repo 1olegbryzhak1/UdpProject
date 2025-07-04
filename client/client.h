@@ -16,6 +16,7 @@ public:
 private slots:
     void sendRequest();
     void handleResponse();
+    void onReceiveTimeout();
 
 private:
     QUdpSocket udpSocket;
@@ -26,6 +27,7 @@ private:
 
     QVector<double> receivedData;
     QSet<int> receivedChunks;
+    QTimer receiveTimeout;
     int totalChunks = -1;
 
     void loadConfig();

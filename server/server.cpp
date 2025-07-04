@@ -77,6 +77,7 @@ void Server::handleReadyRead() {
 
                 udpSocket.writeDatagram(packet, sender, senderPort);
 
+                // delay for avoid missing packets
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
                 Logger::write(LogLevel::DEBUG, QString("Sent chunk %1/%2 (%3 doubles) to %4:%5")
